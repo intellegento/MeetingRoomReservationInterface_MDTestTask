@@ -25,8 +25,8 @@ function placementStyle({ rowStart, rowEnd, insetTop, insetBottom }: GridPlaceme
   const span = (rowEnd - rowStart) * ROW_MINUTES;
   return {
     gridRow: `${rowStart} / ${rowEnd}`,
-    ["--inset-top" as string]: `${(insetTop / span) * 100}%`,
-    ["--inset-bottom" as string]: `${(insetBottom / span) * 100}%`,
+    ["--inset-top" as string]: `calc(${insetTop / span} * 100%)`,
+    ["--inset-bottom" as string]: `calc(${insetBottom / span} * 100%)`,
   };
 }
 

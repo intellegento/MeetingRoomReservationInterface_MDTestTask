@@ -9,7 +9,7 @@ import type { EndChoice, FormField, FormValues } from "@/components/booking-form
 import { ROOM_TIMEZONE } from "@/domain/constants";
 import { getEarliestStart } from "@/domain/day";
 import { getEndOptions } from "@/domain/end-options";
-import { isBookingLocked, MESSAGES, normalizeTitle, validateBooking } from "@/domain/rules";
+import { isBookingLocked, MESSAGES, normalizeTitle, validateBooking, validateStart } from "@/domain/rules";
 import { getRoomNow } from "@/domain/time";
 import type { Booking, BookingInput, RoomNow, ValidationContext, ValidationError } from "@/domain/types";
 import { useCreateBooking, useUpdateBooking } from "../bookings/hooks";
@@ -37,11 +37,10 @@ interface ClientCheck {
 function checkValues(input: BookingInput, values: FormValues, context: ValidationContext): ClientCheck {
   const result = validateBooking(input, context);
   let errors = result.ok ? [] : result.errors;
-  // Без конца domain останавливается на формате. Ошибки начала (B1, B6, B12) от конца не зависят:
-  // берём их из проверки того же начала с концом, равным началу; ошибки конца этой проверки отбрасываются.
+  // Без конца validateBooking останавливается на формате; ошибки начала и даты — из validateStart.
   if (input.end === "" && !errors.some((error) => error.field === "start")) {
-    const probe = validateBooking({ ...input, end: input.start }, context);
-    if (!probe.ok) errors = [...errors, ...probe.errors.filter((error) => error.field !== "end")];
+    const start = validateStart(input.date, input.start, context.now);
+    if (!start.ok) errors = [...errors, ...start.errors];
   }
 
   const check: ClientCheck = { byField: {}, other: [] };

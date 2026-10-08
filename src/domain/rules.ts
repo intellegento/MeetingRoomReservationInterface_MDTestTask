@@ -112,6 +112,17 @@ export function validateBooking(input: BookingInput, context: ValidationContext)
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }
 
+/**
+ * Ошибки полей date и start без конца (формат, B1 для начала, B6, B12): подсказка формы до выбора конца.
+ * Правила не дублируются: validateBooking с концом, равным началу, проверяет те же date и start;
+ * ошибки конца (B2 из-за равенства) отбрасываются. Брони не нужны — пересечение зависит от конца.
+ */
+export function validateStart(date: string, start: string, now: RoomNow): ValidationResult {
+  const result = validateBooking({ date, start, end: start }, { bookings: [], now });
+  const errors = result.ok ? [] : result.errors.filter((error) => error.field === "date" || error.field === "start");
+  return errors.length === 0 ? { ok: true } : { ok: false, errors };
+}
+
 function overlapsBooking(interval: { start: number; end: number }, booking: BookingInput): boolean {
   const start = parseTime(booking.start);
   const end = parseTime(booking.end);

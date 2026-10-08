@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ROOM_TIMEZONE } from "./constants";
-import { MESSAGES, bookingsOverlap, isBookingLocked, normalizeTitle, validateBooking } from "./rules";
+import { MESSAGES, bookingsOverlap, isBookingLocked, normalizeTitle, validateBooking, validateStart } from "./rules";
 import { getRoomNow } from "./time";
 import type { Booking, BookingInput, RoomNow, ValidationContext, ValidationErrorCode, ValidationResult } from "./types";
 
@@ -383,3 +383,20 @@ describe("U3: у каждого кода ошибки есть сообщени�
   });
 });
 
+describe("validateStart: ошибки начала и даты без конца (форма, F3)", () => {
+  const codes = (result: ValidationResult) => (result.ok ? [] : result.errors.map((e) => `${e.code} / ${e.field}`));
+  it.each([
+    { date: TOMORROW, start: "08:59", expected: ["OUTSIDE_WORKING_HOURS / start"] },
+    { date: TOMORROW, start: "09:00", expected: [] },
+    { date: TOMORROW, start: "17:30", expected: [] },
+    { date: TOMORROW, start: "18:00", expected: [] },
+    { date: TOMORROW, start: "18:01", expected: ["OUTSIDE_WORKING_HOURS / start"] },
+    { date: TODAY, start: "10:10", expected: [] },
+    { date: TODAY, start: "10:09", expected: ["START_IN_PAST / start"] },
+    { date: YESTERDAY, start: "12:00", expected: ["DATE_IN_PAST / date"] },
+    { date: TOMORROW, start: "9:00", expected: ["INVALID_REQUEST / start"] },
+    { date: TOMORROW, start: "", expected: ["INVALID_REQUEST / start"] },
+  ])("B1, B6, B12: validateStart($date, «$start») при сейчас 2026-10-08 10:10 → $expected", ({ date, start, expected }) => {
+    expect(codes(validateStart(date, start, NOW))).toEqual(expected);
+  });
+});

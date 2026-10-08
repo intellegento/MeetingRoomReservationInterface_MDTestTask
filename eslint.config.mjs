@@ -10,6 +10,8 @@ import tseslint from "typescript-eslint";
 // Файлы-часы: только здесь разрешены Date.now() и new Date() без аргумента (B9).
 const CLOCK_FILES = ["src/server/clock.ts", "src/features/clock.ts"];
 const TEST_FILES = ["src/**/*.test.ts", "src/**/*.test.tsx"];
+// Тестовая инфраструктура (fake API, обёртки) — не продуктовый код.
+const TEST_UTILS = ["src/**/test-utils.ts", "src/**/test-utils.tsx", "src/**/*-test-utils.ts"];
 
 const NOW_MESSAGE =
   "«Сейчас» берётся только из файлов-часов (src/server/clock.ts, src/features/clock.ts) и передаётся параметром (B9, AGENTS.md).";
@@ -27,6 +29,17 @@ const RESTRICTED_TIME_LITERALS = [
   { selector: "Literal[value=/^0?9:00$|^18:00$/]", message: TIME_LITERAL_MESSAGE },
   { selector: "TemplateElement[value.raw=/^0?9:00$|^18:00$/]", message: TIME_LITERAL_MESSAGE },
 ];
+
+const RULE_NUMBER_MESSAGE =
+  "Число бизнес-правила (30, 100, 120, 540, 1080): берите константу из src/domain/constants, а не литерал (S1, INC-7).";
+
+// Числа правил: шаг и минимум 30, длина названия 100, максимум 120, границы дня 540/1080 в минутах.
+// Только src/features и src/components: правила живут в domain, server — их потребитель на сервере.
+// По raw, а не value: esquery сравнивает value нестрого, и строка "30" тоже совпала бы.
+const RESTRICTED_RULE_NUMBERS = [30, 100, 120, 540, 1080].map((value) => ({
+  selector: `Literal[raw=/^${value}$/]`,
+  message: RULE_NUMBER_MESSAGE,
+}));
 
 // Слои: импорт через алиас @/<слой> или относительным путём ../<слой>.
 const layer = (name, message) => ({
@@ -86,6 +99,13 @@ export default tseslint.config(
         { object: "window", property: "fetch", message: "fetch вызывается только в src/api (S1)." },
         { object: "globalThis", property: "fetch", message: "fetch вызывается только в src/api (S1)." },
       ],
+    },
+  },
+  {
+    files: ["src/features/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}"],
+    ignores: [...TEST_FILES, ...TEST_UTILS],
+    rules: {
+      "no-restricted-syntax": ["error", ...RESTRICTED_NOW, ...RESTRICTED_TIME_LITERALS, ...RESTRICTED_RULE_NUMBERS],
     },
   },
   {

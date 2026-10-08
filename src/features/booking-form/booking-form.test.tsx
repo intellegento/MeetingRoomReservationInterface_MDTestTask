@@ -217,6 +217,20 @@ describe("Форма: начало и варианты конца (F3, B10)", ()
     expect(endSelect().getAttribute("aria-invalid")).toBe("true");
     expect(create).not.toHaveBeenCalled();
   });
+
+  it("F3: конец, сброшенный промежуточным началом при вводе по цифрам, возвращается (13:03 → 13:30, конец 14:00)", async () => {
+    await openCreate(new FakeBookingsApi(), TOMORROW);
+    setStart("13:00");
+    setEnd("14:00");
+
+    setStart("13:03");
+    expect(endSelect().value).toBe("");
+    expect(within(dialog()).getByText(/Окончание сброшено/)).toBeTruthy();
+
+    setStart("13:30");
+    expect(endSelect().value).toBe("14:00");
+    expect(within(dialog()).queryByText(/Окончание сброшено/)).toBeNull();
+  });
 });
 
 describe("Форма: правила domain (B1, B6, B12)", () => {
