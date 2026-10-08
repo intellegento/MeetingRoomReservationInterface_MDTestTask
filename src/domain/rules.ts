@@ -20,7 +20,8 @@ import type {
 
 const WORKDAY = `${formatTime(WORKDAY_START_MINUTES)}–${formatTime(WORKDAY_END_MINUTES)}`;
 
-const MESSAGES = {
+/** Сообщения об ошибках правил (Q17): сервер берёт их отсюда же. */
+export const MESSAGES = {
   BOOKING_LOCKED: "Бронь уже началась или прошла — изменить её нельзя",
   INVALID_DATE: "Дата должна быть в формате ГГГГ-ММ-ДД",
   INVALID_TIME: "Время должно быть в формате ЧЧ:ММ",
@@ -34,6 +35,20 @@ const MESSAGES = {
   TITLE_TOO_LONG: `Название не длиннее ${TITLE_MAX_LENGTH} символов`,
   OVERLAP: "Это время уже занято другой бронью",
 } as const;
+
+/** title (Q6): обрезка пробелов по краям, пустая строка — отсутствие названия. */
+export function normalizeTitle(title: string | undefined): string | undefined {
+  const trimmed = title?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/** Две брони пересекаются: одна дата и пересечение полуоткрытых интервалов (B5). */
+export function bookingsOverlap(a: BookingInput, b: BookingInput): boolean {
+  if (a.date !== b.date) return false;
+  const start = parseTime(a.start);
+  const end = parseTime(a.end);
+  return start !== null && end !== null && overlapsBooking({ start, end }, b);
+}
 
 /** Бронь начавшаяся или прошедшая: её дата раньше сегодняшней или start ≤ floor(now) (B11). */
 export function isBookingLocked(booking: Booking, now: RoomNow): boolean {
@@ -97,7 +112,7 @@ export function validateBooking(input: BookingInput, context: ValidationContext)
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }
 
-function overlapsBooking(interval: { start: number; end: number }, booking: Booking): boolean {
+function overlapsBooking(interval: { start: number; end: number }, booking: BookingInput): boolean {
   const start = parseTime(booking.start);
   const end = parseTime(booking.end);
   return start !== null && end !== null && overlaps(interval, { start, end });

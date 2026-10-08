@@ -580,7 +580,7 @@ $ grep -rnE "new Date\(\s*\)" src/domain → пусто (exit 1)
 | ☑ `.env*` и `~/.ssh` не трогались | В git только `.env.example`, `git status -- '.env*'` пуст (в пробе policy-check файл временно менялся и восстановлен пустым — это `.env.example`, разрешённый файл). `~/.ssh` не читался |
 | ☑ Инциденты | Нарушений правил и неожиданных поломок нет — в `incidents.md` не добавлялось. Мелкие отклонения — ниже |
 | ☑ INDEX.md | Строка этапа 1 → `stage-1.md`, коммит `stage 1: domain (gate green)` |
-| ☐ После коммита и push — СТОП | Выполняется после записи конца в time-log |
+| ☑ После коммита и push — СТОП | Коммит `c478544 stage 1: domain (gate green)` в `origin/main` (`git status -sb` → `## main...origin/main`). Отмечено в коммите этапа 2 (см. `stage-2.md`) |
 
 ## Отклонения от плана
 

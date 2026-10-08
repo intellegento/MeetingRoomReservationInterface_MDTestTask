@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev-devtools",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["ENABLE_DEV_TOOLS=true", "npx", "next", "dev", "-p", "3101"],
+      "port": 3101
+    },
+    {
+      "name": "dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "-p", "3100"],
+      "port": 3100
+    }
+  ]
+}
