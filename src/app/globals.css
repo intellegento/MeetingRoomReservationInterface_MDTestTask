@@ -22,7 +22,7 @@ body {
   line-height: 1.4;
 }
 
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 
 button {
   min-height: 2.25rem;
@@ -124,3 +124,35 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .day-loading p, .day-empty p { margin: 0 0 0.5rem; }
 .day-loading__bar { height: var(--row-height); margin-bottom: 4px; border-radius: 4px; background: var(--locked-bg); }
 .day-error p { color: var(--danger); margin: 0 0 0.5rem; }
+
+/* Объявления для экранных дикторов (aria-live): в DOM, но не видны. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Диалог формы брони (этап 5). */
+.dialog__overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, 0.4); }
+.dialog {
+  position: fixed; top: 50%; left: 50%; z-index: 101; transform: translate(-50%, -50%);
+  width: min(28rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow-y: auto;
+  padding: 1rem; border-radius: 8px; background: var(--bg); color: var(--fg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+.dialog__title { margin: 0 0 0.75rem; font-size: 1.2rem; }
+.dialog__note { margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; border-left: 4px solid var(--muted); background: var(--locked-bg); }
+.dialog__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.dialog__actions button[type="submit"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.booking-form { display: flex; flex-direction: column; gap: 0.75rem; }
+.booking-form__error, .booking-form__summary { margin: 0; padding: 0.5rem 0.75rem; border-left: 4px solid var(--danger); color: var(--danger); }
+.booking-form__summary p, .booking-form__summary ul { margin: 0; }
+.booking-form__summary ul { padding-left: 1.25rem; }
+
+.field { display: flex; flex-direction: column; gap: 0.25rem; }
+.field label { font-weight: 600; }
+.field input, .field select { min-height: 2.25rem; width: 100%; max-width: 100%; }
+.field input[readonly] { background: var(--locked-bg); }
+.field [aria-invalid="true"] { border: 2px solid var(--danger); }
+.field__hint { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.field__error { margin: 0; font-size: 0.85rem; color: var(--danger); }

@@ -14,7 +14,8 @@ export interface DayGridProps {
   items: readonly DayGridItem[];
   /** Минута, до которой день прошёл (getPastUntil из domain). */
   pastUntil: number;
-  onSelect: (booking: Booking) => void;
+  /** Будущая бронь — правка, начавшаяся — просмотр; trigger — для возврата фокуса. */
+  onSelect: (booking: Booking, trigger: HTMLElement) => void;
 }
 
 export const LOCKED_NOTE = "Бронь уже началась — изменить нельзя";
@@ -49,23 +50,16 @@ export function DayGrid({ items, pastUntil, onSelect }: DayGridProps) {
           const title = booking.title ?? "Без названия";
           return (
             <li key={booking.id} className="day-grid__cell" style={placementStyle(getGridPlacement(booking.start, booking.end))}>
-              {locked ? (
-                <div className="day-grid__fill booking booking--locked">
-                  <span className="booking__time">{time}</span>
-                  <span className="booking__title">{title}</span>
-                  <span className="booking__note">{LOCKED_NOTE}</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="day-grid__fill booking"
-                  aria-label={`Изменить бронь ${time}, ${title}`}
-                  onClick={() => onSelect(booking)}
-                >
-                  <span className="booking__time">{time}</span>
-                  <span className="booking__title">{title}</span>
-                </button>
-              )}
+              <button
+                type="button"
+                className={locked ? "day-grid__fill booking booking--locked" : "day-grid__fill booking"}
+                aria-label={`${locked ? "Посмотреть" : "Изменить"} бронь ${time}, ${title}`}
+                onClick={(event) => onSelect(booking, event.currentTarget)}
+              >
+                <span className="booking__time">{time}</span>
+                <span className="booking__title">{title}</span>
+                {locked && <span className="booking__note">{LOCKED_NOTE}</span>}
+              </button>
             </li>
           );
         })}

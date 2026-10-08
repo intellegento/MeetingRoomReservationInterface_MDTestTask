@@ -1,7 +1,7 @@
-// Экран дня: дата из URL, брони, состояния U1–U3, только чтение для прошлого (F1, F2, B6, B11).
+// Экран дня: дата из URL, брони, состояния U1–U3, только чтение для прошлого, форма брони (F1–F5, B6, B11).
 "use client";
 
-import { useEffect, useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { DateNav } from "@/components/day-view/date-nav";
 import { DayEmpty } from "@/components/day-view/day-empty";
 import { DayError } from "@/components/day-view/day-error";
@@ -11,6 +11,9 @@ import { ROOM_TIMEZONE } from "@/domain/constants";
 import { getPastUntil, isPastDate } from "@/domain/day";
 import { isBookingLocked } from "@/domain/rules";
 import { getRoomNow, isValidDate } from "@/domain/time";
+import type { Booking } from "@/domain/types";
+import { BookingFormDialog } from "../booking-form/booking-form-dialog";
+import type { FormTarget } from "../booking-form/use-booking-form";
 import { useDayBookings } from "../bookings/hooks";
 import { getNow } from "../clock";
 
@@ -21,9 +24,6 @@ export interface DayViewProps {
   dateParam: string | null;
   onDateChange: (date: string, mode: DateChangeMode) => void;
 }
-
-// Форма и диалоги — этапы 5–6: пока заглушки без логики.
-const notImplemented = () => {};
 
 export function DayView({ dateParam, onDateChange }: DayViewProps) {
   const now = getRoomNow(getNow(), ROOM_TIMEZONE);
@@ -39,6 +39,25 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
   const pastDate = isPastDate(date, now);
   const pastNoteId = useId();
 
+  // Форма брони (этап 5): что открыто, какая кнопка открыла (для возврата фокуса), объявление успеха.
+  const [form, setForm] = useState<{ target: FormTarget; key: number } | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const createRef = useRef<HTMLButtonElement>(null);
+  const openForm = (target: FormTarget, trigger: HTMLElement) => {
+    triggerRef.current = trigger;
+    setAnnouncement("");
+    setForm((prev) => ({ target, key: (prev?.key ?? 0) + 1 }));
+  };
+  const openCreate = (trigger: HTMLElement) => openForm({ mode: "create", date }, trigger);
+  const openBooking = (booking: Booking, trigger: HTMLElement) => openForm({ mode: "edit", booking }, trigger);
+  const returnFocus = (event: Event) => {
+    event.preventDefault();
+    // Кнопка-источник могла исчезнуть («Забронировать» после создания) — тогда «Новая бронь».
+    const trigger = triggerRef.current;
+    (trigger?.isConnected ? trigger : createRef.current)?.focus();
+  };
+
   const showSkeleton = query.data === undefined && !query.isError;
   const showIndicator = query.isFetching && !showSkeleton;
 
@@ -49,9 +68,10 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
         <button
           type="button"
           className="day-view__create"
+          ref={createRef}
           disabled={pastDate}
           aria-describedby={pastDate ? pastNoteId : undefined}
-          onClick={notImplemented}
+          onClick={(event) => openCreate(event.currentTarget)}
         >
           Новая бронь
         </button>
@@ -72,15 +92,31 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
         ) : showSkeleton ? (
           <DayLoading />
         ) : query.data.length === 0 ? (
-          <DayEmpty canCreate={!pastDate} onCreate={notImplemented} />
+          <DayEmpty canCreate={!pastDate} onCreate={openCreate} />
         ) : (
           <DayGrid
             items={query.data.map((booking) => ({ booking, locked: isBookingLocked(booking, now) }))}
             pastUntil={getPastUntil(date, now)}
-            onSelect={notImplemented}
+            onSelect={openBooking}
           />
         )}
       </section>
+      <p aria-live="polite" className="visually-hidden">
+        {announcement}
+      </p>
+      {form && (
+        <BookingFormDialog
+          key={form.key}
+          target={form.target}
+          bookings={query.data ?? []}
+          onClose={() => setForm(null)}
+          onSaved={(message) => {
+            setForm(null);
+            setAnnouncement(message);
+          }}
+          onCloseAutoFocus={returnFocus}
+        />
+      )}
     </div>
   );
 }

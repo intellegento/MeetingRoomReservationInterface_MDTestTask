@@ -174,7 +174,9 @@ describe("DayView: прошедшее и только чтение", () => {
     const item = await itemWith("14:00–14:30");
     expect(item?.textContent).toContain("Ретро");
     expect(item?.textContent).toContain(LOCKED_NOTE);
-    expect(within(item!).queryByRole("button")).toBeNull();
+    expect(within(item!).queryByRole("button", { name: /^Изменить бронь/ })).toBeNull();
+    expect(within(item!).getByRole("button", { name: /^Посмотреть бронь 14:00–14:30/ })).toBeTruthy();
+    expect(within(item!).queryByRole("button", { name: /Удалить/ })).toBeNull();
 
     expect(screen.getByText(PAST_DATE_NOTE)).toBeTruthy();
     const create = screen.getByRole("button", { name: "Новая бронь" }) as HTMLButtonElement;
@@ -219,7 +221,13 @@ describe("DayView: прошедшее и только чтение", () => {
     const item = await itemWith(`${start}–${end}`);
     expect(item).toBeTruthy();
     expect(item!.textContent?.includes(LOCKED_NOTE)).toBe(locked);
-    expect(within(item!).queryByRole("button") === null).toBe(locked);
+    // Решение 2 этапа 5: начавшаяся бронь открывается только для просмотра, без правки и удаления.
+    const edit = within(item!).queryByRole("button", { name: new RegExp(`^Изменить бронь ${start}–${end}`) });
+    const view = within(item!).queryByRole("button", { name: new RegExp(`^Посмотреть бронь ${start}–${end}`) });
+    const remove = within(item!).queryByRole("button", { name: /Удалить/ });
+    expect(edit === null).toBe(locked);
+    expect(view === null).toBe(!locked);
+    expect(locked && remove !== null).toBe(false);
   });
 });
 
