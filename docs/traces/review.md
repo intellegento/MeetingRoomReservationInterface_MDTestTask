@@ -485,3 +485,102 @@ ok   next build
 ### После коммита и push этапа 8 — закрыто в 8b
 
 Коммит `ed09ab9 stage 8: independent review` отправлен в начале 8b (`c08d4db..ed09ab9  main -> main`). Этап 9 не начинался.
+
+---
+
+## 8c: «Новая бронь» и «Забронировать» во время загрузки даты
+
+### Команда заказчика
+
+> Закрой находку из README-notes: пока isPlaceholderData, кнопки «Новая бронь» и
+> «Забронировать» disabled с пояснением через aria-describedby (как у кнопок брони).
+> Сначала grep по тестам на эти кнопки (INC-6) в трейс, затем красный тест, затем
+> реализация, мутация (убрать disabled) и откат. Старые тесты не менять без моего
+> одобрения. date, time-log «8c: новая бронь при загрузке даты», gate, коммит
+> "stage 8c: disable new booking while loading (gate green)", push. СТОП.
+
+Старт: `2026-10-09 00:08:59 +0600`.
+
+### План
+
+ID: F1, U1, F4 (остаток J3 из README-notes). Файлы: `src/features/day-view/day-view.tsx` (пояснение и `disabled` для «Новая бронь»), `src/components/day-view/day-empty.tsx` (prop для «Забронировать»), `src/components/day-view/day-grid.tsx` (пояснение переезжает в `DayView`, сетка получает id). Тесты: новые в `day-view.test.tsx`. Новых файлов и экспортируемых функций нет; новые props — `DayEmpty.staleNoteId`, `DayGrid.staleNoteId` вместо `stale`; `STALE_NOTE` переезжает из `day-grid.tsx` в `day-view.tsx` (одно пояснение на экран).
+
+### grep затронутых проверок (INC-6)
+
+Команда: `grep -rnE "Новая бронь|Забронировать" src --include='*.test.ts' --include='*.test.tsx'`
+
+| Файл:строка | Тест | Вывод |
+|-------------|------|-------|
+| `booking-form-errors.test.tsx:73,76` | помощник `openCreate`: клик после первой загрузки | верен: первая загрузка не placeholder (нет прежних данных) |
+| `booking-form-errors.test.tsx:118,193` | диалог «Новая бронь» остаётся открытым | не затронут (диалог, не кнопка) |
+| `booking-form.test.tsx:77,80` | помощник `openCreate` | верен |
+| `booking-form.test.tsx:96,107` | A2: открытие, Esc → фокус на «Новая бронь» | верен |
+| `booking-form.test.tsx:125-130` | F4, U2: «Забронировать» в пустом дне | верен: первая загрузка |
+| `delete-booking.test.tsx:110,128,151,164` | фокус на «Новая бронь» после удаления | верен: перезапрос той же даты — не placeholder |
+| `a11y.test.tsx:74,77` | помощник `openCreate` | верен |
+| `day-view.test.tsx:82,90,91` | B9, U2: «Забронировать», «Новая бронь» доступна в 01:30 | верен: первая загрузка |
+| `day-view.test.tsx:146,150` | U2: пустая будущая дата | верен |
+| `day-view.test.tsx:171,183-187` | B6, F1: «Новая бронь» disabled, `aria-describedby` — один id на пояснение прошедшей даты | верен: дата открыта сразу, не placeholder → `aria-describedby` по-прежнему один id |
+| `day-view.test.tsx:190,194` | U2, B6: пустая прошедшая дата без «Забронировать» | верен |
+| `dev-panel.test.tsx:52,53` | помощник `createBooking` после загрузки | верен |
+
+Правок старых тестов не нужно.
+
+### Красный прогон
+
+Вывод ожидания (`day-view.test.tsx`, describe J3):
+- `завтра → «Вперёд», пока грузится 2026-10-10: «Новая бронь»…` → list(2026-10-10) задержан → `isPlaceholderData` → «Новая бронь» `disabled`, описание = «Брони выбранной даты загружаются — действия недоступны», клик не открывает диалог; после ответа (бронь 15:00–16:00) — доступна, без `aria-describedby`.
+- `пустое завтра → «Вперёд»… «Забронировать»` → прежний пустой день как placeholder → «Забронировать» `disabled` с тем же описанием, клик без диалога; после ответа (новая дата пуста) — новая кнопка доступна, без `aria-describedby`.
+
+`TZ=UTC npx vitest run src/features/day-view/day-view.test.tsx`:
+```
+     × F1, U1: завтра → «Вперёд», пока грузится 2026-10-10: «Новая бронь» disabled с пояснением, клик не открывает форму; после ответа — доступна 14ms
+     × F1, U2: пустое завтра → «Вперёд», пока грузится 2026-10-10: «Забронировать» прежнего пустого дня disabled с пояснением; после ответа — доступна 12ms
+AssertionError: expected false to be true // Object.is equality
+AssertionError: expected false to be true // Object.is equality
+      Tests  2 failed | 32 passed (34)
+```
+
+### Реализация
+
+- `day-view.tsx`: `stale = query.isPlaceholderData`; одно visually-hidden пояснение `STALE_NOTE` с `useId` на экран; «Новая бронь» — `disabled={pastDate || stale}`, `aria-describedby` — id пояснения прошедшей даты и/или загрузки; id передаётся в `DayGrid` и `DayEmpty`.
+- `day-grid.tsx`: prop `stale` → `staleNoteId`, своё пояснение и `useId` удалены (пояснение теперь одно, в `DayView`).
+- `day-empty.tsx`: prop `staleNoteId` → «Забронировать» `disabled` и `aria-describedby`.
+
+После: `src/features`, `src/components` — 150 passed; `tsc`, `eslint` — чисто. Тесты J3 из 8b (кнопки броней) остались зелёными.
+
+### Мутации
+
+| Мутация | Результат |
+|---------|-----------|
+| «Новая бронь»: `disabled={pastDate}` (без `stale`) | 1 failed: `F1, U1: завтра → «Вперёд»… «Новая бронь» disabled…` |
+| «Забронировать»: `disabled={false}` | 1 failed: `F1, U2: пустое завтра → «Вперёд»… «Забронировать»…` |
+| Откат | 58 passed |
+
+Старые тесты не менялись: в `git diff` тестовых файлов 0 удалённых строк.
+
+### Gate
+
+```
+=== gate: ЗЕЛЁНЫЙ ===
+ok   tsc --noEmit
+ok   eslint
+ok   policy-check
+ok   тесты, TZ=UTC — тестов: 568 (passed 568, failed 0)
+ok   тесты domain и *.tz.test, TZ=America/Los_Angeles — тестов: 250 (passed 250, failed 0)
+ok   next build
+```
+566 → 568.
+
+### Stage-gate 8c
+
+| Пункт | Доказательство |
+|-------|----------------|
+| ☑ Команда, gate, красный прогон с выводом ожидания, мутации | выше |
+| ☑ Время | старт `2026-10-09 00:08:59 +0600`, конец `2026-10-09 00:10:35 +0600`, факт `0:01:36` |
+| ☑ Затронутые проверки найдены до реализации | таблица grep, правок нет |
+| ☑ Тесты не ослаблены | 0 удалённых строк в тестах |
+| ☑ Новые файлы и функции в плане | новых файлов и функций нет; props `staleNoteId` и перенос `STALE_NOTE` — в плане |
+| ☑ Инциденты | нет |
+| ☑ INDEX.md | строка 8c |
+| ☐ После коммита и push — СТОП | закрывается выводом `git push` |

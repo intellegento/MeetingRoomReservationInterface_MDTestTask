@@ -25,6 +25,9 @@ import { devRequest, devToolsEnabled, type DevToolsState } from "./dev-tools";
 
 export type DateChangeMode = "push" | "replace";
 
+/** Пояснение к кнопкам, пока виден список прежней даты (J3, 8c). */
+const STALE_NOTE = "Брони выбранной даты загружаются — действия недоступны";
+
 export interface DayViewProps {
   /** Значение ?date из URL; null — параметра нет. */
   dateParam: string | null;
@@ -44,6 +47,10 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
   const query = useDayBookings(date);
   const pastDate = isPastDate(date, now);
   const pastNoteId = useId();
+  const staleNoteId = useId();
+  // Пока виден список прежней даты (keepPreviousData), действия с ним и создание недоступны.
+  const stale = query.isPlaceholderData;
+  const createNotes = [pastDate ? pastNoteId : undefined, stale ? staleNoteId : undefined].filter(Boolean).join(" ");
 
   // Форма брони (этап 5): что открыто, какая кнопка открыла (для возврата фокуса), объявление успеха.
   const [form, setForm] = useState<{ target: FormTarget; key: number } | null>(null);
@@ -110,8 +117,8 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
           type="button"
           className="day-view__create"
           ref={createRef}
-          disabled={pastDate}
-          aria-describedby={pastDate ? pastNoteId : undefined}
+          disabled={pastDate || stale}
+          aria-describedby={createNotes || undefined}
           onClick={(event) => openCreate(event.currentTarget)}
         >
           Новая бронь
@@ -120,6 +127,11 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
       {pastDate && (
         <p id={pastNoteId} className="day-view__past-note">
           Прошедшая дата, бронирование недоступно
+        </p>
+      )}
+      {stale && (
+        <p id={staleNoteId} className="visually-hidden">
+          {STALE_NOTE}
         </p>
       )}
       <section className="day-view__schedule" aria-label="Расписание дня" aria-busy={query.isFetching}>
@@ -133,14 +145,14 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
         ) : showSkeleton ? (
           <DayLoading />
         ) : query.data.length === 0 ? (
-          <DayEmpty canCreate={!pastDate} onCreate={openCreate} />
+          <DayEmpty canCreate={!pastDate} onCreate={openCreate} staleNoteId={stale ? staleNoteId : undefined} />
         ) : (
           <DayGrid
             items={query.data.map((booking) => ({ booking, locked: isBookingLocked(booking, now) }))}
             pastUntil={getPastUntil(date, now)}
             onSelect={openBooking}
             onDelete={openDelete}
-            stale={query.isPlaceholderData}
+            staleNoteId={stale ? staleNoteId : undefined}
           />
         )}
       </section>

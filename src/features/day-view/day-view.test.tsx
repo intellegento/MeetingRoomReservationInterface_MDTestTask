@@ -448,6 +448,49 @@ describe("DayView: прежний список во время загрузки 
     expect(await screen.findByText("На эту дату броней нет")).toBeTruthy();
   });
 
+  it("F1, U1: завтра → «Вперёд», пока грузится 2026-10-10: «Новая бронь» disabled с пояснением, клик не открывает форму; после ответа — доступна", async () => {
+    const api = new FakeBookingsApi([booking("n1", TOMORROW, "11:00", "12:00"), booking("s1", "2026-10-10", "15:00", "16:00")]);
+    renderDay(api, TOMORROW);
+    await screen.findByText(/11:00–12:00/);
+    const release = api.holdList("2026-10-10");
+
+    fireEvent.click(screen.getByRole("button", { name: "Вперёд" }));
+    await screen.findByRole("status");
+
+    const create = screen.getByRole("button", { name: "Новая бронь" });
+    expect(isDisabled(create)).toBe(true);
+    expect(describedText(create)).toBe(STALE_NOTE);
+    fireEvent.click(create);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    release();
+    await screen.findByText(/15:00–16:00/);
+    expect(isDisabled(create)).toBe(false);
+    expect(create.getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it("F1, U2: пустое завтра → «Вперёд», пока грузится 2026-10-10: «Забронировать» прежнего пустого дня disabled с пояснением; после ответа — доступна", async () => {
+    const api = new FakeBookingsApi();
+    renderDay(api, TOMORROW);
+    await screen.findByText("На эту дату броней нет");
+    const release = api.holdList("2026-10-10");
+
+    fireEvent.click(screen.getByRole("button", { name: "Вперёд" }));
+    await screen.findByRole("status");
+
+    const book = screen.getByRole("button", { name: "Забронировать" });
+    expect(isDisabled(book)).toBe(true);
+    expect(describedText(book)).toBe(STALE_NOTE);
+    fireEvent.click(book);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    release();
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    const fresh = screen.getByRole("button", { name: "Забронировать" });
+    expect(isDisabled(fresh)).toBe(false);
+    expect(fresh.getAttribute("aria-describedby")).toBeNull();
+  });
+
   it("F1: список своей даты (не placeholder) — кнопки активны, пояснения нет", async () => {
     const api = new FakeBookingsApi([booking("n1", TOMORROW, "11:00", "12:00")]);
     renderDay(api, TOMORROW);

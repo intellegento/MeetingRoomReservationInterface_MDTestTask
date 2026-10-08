@@ -1,5 +1,5 @@
 // Сетка дня на CSS Grid: ряды по 30 минут, брони блоками на своих рядах, прошлое затемнено (F2, B6, B11).
-import { useId, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import { WORKDAY_START_MINUTES } from "@/domain/constants";
 import { MESSAGES } from "@/domain/rules";
 import type { Booking } from "@/domain/types";
@@ -19,11 +19,9 @@ export interface DayGridProps {
   onSelect: (booking: Booking, trigger: HTMLElement) => void;
   /** «Удалить» — только у будущих броней (Q4); trigger — для возврата фокуса. */
   onDelete: (booking: Booking, trigger: HTMLElement) => void;
-  /** Показаны брони прежней даты, пока грузится новая (J3): кнопки броней disabled с пояснением. */
-  stale?: boolean;
+  /** Показаны брони прежней даты, пока грузится новая (J3): кнопки броней disabled, id — пояснение. */
+  staleNoteId?: string;
 }
-
-export const STALE_NOTE = "Брони выбранной даты загружаются — действия недоступны";
 
 /** Ряды сетки и отступы внутри них в процентах высоты блока. */
 function placementStyle({ rowStart, rowEnd, insetTop, insetBottom }: GridPlacement): CSSProperties {
@@ -35,17 +33,11 @@ function placementStyle({ rowStart, rowEnd, insetTop, insetBottom }: GridPlaceme
   };
 }
 
-export function DayGrid({ items, pastUntil, onSelect, onDelete, stale = false }: DayGridProps) {
+export function DayGrid({ items, pastUntil, onSelect, onDelete, staleNoteId }: DayGridProps) {
   const gridStyle = { ["--rows" as string]: ROW_COUNT } as CSSProperties;
-  const staleNoteId = useId();
-  const staleProps = stale ? { disabled: true, "aria-describedby": staleNoteId } : {};
+  const staleProps = staleNoteId === undefined ? {} : { disabled: true, "aria-describedby": staleNoteId };
   return (
     <div className="day-grid" style={gridStyle}>
-      {stale && (
-        <p id={staleNoteId} className="visually-hidden">
-          {STALE_NOTE}
-        </p>
-      )}
       {ROW_LABELS.map((label, i) => (
         <div key={label} className="day-grid__label" style={{ gridRow: `${i + 1}` }}>
           {label}
