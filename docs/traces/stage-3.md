@@ -425,3 +425,7 @@ ok   next build
 ```
 
 INC-4 закрыт (`incidents.md`). Пункт «После коммита и push» этапа 3 закрыт в чек-листе выше.
+
+### После коммита и push (3b) — закрыто на этапе 4
+
+Коммит `413cba4 stage 3b: expectation rule and fake ordering test (gate green)` в `origin/main`: на старте этапа 4 `git log --oneline -1` → `413cba4`, `git status -sb` → `## main...origin/main` (локальная ветка совпадает с удалённой, неотправленных коммитов нет). По команде этапа 4.

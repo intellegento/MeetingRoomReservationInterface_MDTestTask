@@ -3,6 +3,7 @@
 "use client";
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -40,6 +41,8 @@ export function useDayBookings(date: string): UseQueryResult<Booking[], ApiError
   return useQuery<Booking[], ApiError>({
     queryKey: bookingsKey(date),
     queryFn: ({ signal }) => api.list(date, signal),
+    // При смене даты прежний список виден, пока грузится новый (индикатор — isFetching).
+    placeholderData: keepPreviousData,
   });
 }
 

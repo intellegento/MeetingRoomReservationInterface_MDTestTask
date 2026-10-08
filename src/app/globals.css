@@ -1,0 +1,126 @@
+/* Стили экрана дня. Позиция блоков — CSS-переменные из grid-placement (F2). */
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #5c5c5c;
+  --line: #d9d9d9;
+  --accent: #1f5fbf;
+  --booking-bg: #e3edfb;
+  --locked-bg: #ececec;
+  --past-bg: rgba(0, 0, 0, 0.08);
+  --danger: #b00020;
+  --row-height: 2.5rem;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.4;
+}
+
+button, input { font: inherit; }
+
+button {
+  min-height: 2.25rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.page { max-width: 960px; margin: 0 auto; padding: 16px; }
+.page h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+
+.day-view__toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; justify-content: space-between; }
+
+.date-nav { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: flex-end; }
+.date-nav__buttons { display: flex; gap: 0.25rem; }
+.date-nav__field { display: flex; flex-direction: column; font-size: 0.85rem; color: var(--muted); }
+.date-nav__field input { min-height: 2.25rem; color: var(--fg); }
+.date-nav__current { flex-basis: 100%; font-weight: 600; }
+
+.day-view__create { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.day-view__past-note { margin: 0.75rem 0 0; padding: 0.5rem 0.75rem; border-left: 4px solid var(--muted); background: var(--locked-bg); }
+
+.day-view__schedule { position: relative; margin-top: 1rem; }
+.day-view__fetching { position: absolute; top: -1.6rem; right: 0; margin: 0; font-size: 0.85rem; color: var(--muted); }
+.day-view__schedule[aria-busy="true"] .day-grid { opacity: 0.6; }
+
+.day-grid {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  grid-template-rows: repeat(var(--rows), var(--row-height));
+  border-top: 1px solid var(--line);
+}
+
+.day-grid__label {
+  grid-column: 1;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding-top: 0.1rem;
+}
+
+/* Список броней — прозрачная обёртка: его пункты встают в ряды сетки. */
+.day-grid__bookings { display: contents; }
+
+.day-grid__cell {
+  grid-column: 2;
+  position: relative;
+  list-style: none;
+  min-width: 0;
+}
+
+.day-grid__fill {
+  position: absolute;
+  top: var(--inset-top);
+  bottom: var(--inset-bottom);
+  left: 0.25rem;
+  right: 0;
+  overflow: hidden;
+}
+
+.day-grid__past { z-index: 0; }
+.day-grid__past .day-grid__fill {
+  left: 0;
+  background: repeating-linear-gradient(-45deg, var(--past-bg) 0 6px, transparent 6px 12px);
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 0.1rem 0.4rem;
+}
+
+.booking {
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+  align-content: flex-start;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  border-radius: 4px;
+  background: var(--booking-bg);
+  text-align: left;
+  font-size: 0.85rem;
+  min-height: 0;
+}
+
+.booking--locked { border-color: var(--muted); background: var(--locked-bg); }
+.booking__time { font-weight: 600; }
+.booking__title { overflow-wrap: anywhere; }
+.booking__note { flex-basis: 100%; font-size: 0.75rem; color: var(--muted); }
+
+.day-loading p, .day-empty p { margin: 0 0 0.5rem; }
+.day-loading__bar { height: var(--row-height); margin-bottom: 4px; border-radius: 4px; background: var(--locked-bg); }
+.day-error p { color: var(--danger); margin: 0 0 0.5rem; }

@@ -21,6 +21,8 @@ export class FakeBookingsApi implements BookingsApi {
   readonly listCalls: { date: string; signal?: AbortSignal }[] = [];
   readonly mutationCalls: { method: Mutation; options?: RequestOptions }[] = [];
   private readonly listGates = new Map<string, Promise<void>>();
+  private readonly listFailures = new Map<string, ApiError>();
+  private readonly hangingDates = new Set<string>();
   private mutationGate: Promise<void> = Promise.resolve();
   private readonly failures = new Map<Mutation, ApiError>();
   private nextId = 100;
@@ -41,6 +43,16 @@ export class FakeBookingsApi implements BookingsApi {
     };
   }
 
+  /** Следующий вызов list(date) отклоняется error. */
+  failList(date: string, error: ApiError): void {
+    this.listFailures.set(date, error);
+  }
+
+  /** list(date) не отвечает, пока не отменён signal; затем AbortError — как http-клиент (D2). */
+  hangList(date: string): void {
+    this.hangingDates.add(date);
+  }
+
   /** Мутации ждут release(). */
   holdMutations(): () => void {
     const gate = deferred();
@@ -55,6 +67,18 @@ export class FakeBookingsApi implements BookingsApi {
 
   async list(date: string, signal?: AbortSignal): Promise<Booking[]> {
     this.listCalls.push({ date, signal });
+    const failure = this.listFailures.get(date);
+    if (failure) {
+      this.listFailures.delete(date);
+      throw failure;
+    }
+    if (this.hangingDates.has(date)) {
+      await new Promise<never>((_resolve, reject) => {
+        const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener("abort", abort, { once: true });
+      });
+    }
     // Контракт BookingsApi.list: по возрастанию start (как сервер, F2), сравнение в минутах (T5).
     const snapshot = () =>
       this.bookings
