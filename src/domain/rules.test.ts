@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ROOM_TIMEZONE } from "./constants";
-import { isBookingLocked, validateBooking } from "./rules";
+import { MESSAGES, bookingsOverlap, isBookingLocked, normalizeTitle, validateBooking } from "./rules";
 import { getRoomNow } from "./time";
 import type { Booking, BookingInput, RoomNow, ValidationContext, ValidationErrorCode, ValidationResult } from "./types";
 
@@ -308,3 +308,78 @@ describe("Сообщения на русском (Q17)", () => {
     expect(error.message).toMatch(/[А-Яа-яЁё]{3,}/);
   });
 });
+
+describe("F4: normalizeTitle (Q6)", () => {
+  it.each([
+    ["пробелы по краям", "  Демо  ", "Демо"],
+    ["пробелы внутри сохраняются", "  Демо  дня ", "Демо  дня"],
+    ["пустая строка → нет названия", "", undefined],
+    ["строка из пробелов → нет названия", "   ", undefined],
+    ["undefined → нет названия", undefined, undefined],
+  ])("F4: %s: %j → %j", (_case, title, expected) => {
+    expect(normalizeTitle(title)).toBe(expected);
+  });
+
+  it("F4: ровно 100 символов — без изменений, validateBooking принимает", () => {
+    const title = normalizeTitle(` ${"я".repeat(100)} `);
+    expect(title).toBe("я".repeat(100));
+    expectOk(validate(input("10:00", "10:30", TOMORROW, title)));
+  });
+
+  it("F4: 101 символ — normalizeTitle не обрезает, validateBooking → TITLE_TOO_LONG", () => {
+    const title = normalizeTitle("я".repeat(101));
+    expect(title).toBe("я".repeat(101));
+    expect(firstError(validate(input("10:00", "10:30", TOMORROW, title)))).toMatchObject({ code: "TITLE_TOO_LONG", field: "title" });
+  });
+});
+
+describe("B5: bookingsOverlap", () => {
+  const at = (start: string, end: string, date = TOMORROW): BookingInput => ({ date, start, end });
+
+  it.each([
+    ["касание справа", false, at("10:00", "11:00"), at("11:00", "12:00")],
+    ["касание слева", false, at("11:00", "12:00"), at("10:00", "11:00")],
+    ["вложение", true, at("10:15", "10:45"), at("10:00", "11:00")],
+    ["накрывает", true, at("09:30", "11:30"), at("10:00", "11:00")],
+    ["равные интервалы", true, at("10:00", "11:00"), at("10:00", "11:00")],
+    ["частичное пересечение", true, at("10:30", "11:30"), at("10:00", "11:00")],
+    ["равные интервалы на разных датах", false, at("10:00", "11:00", TOMORROW), at("10:00", "11:00", SATURDAY)],
+  ])("B5: %s → %s", (_case, expected, a, b) => {
+    expect(bookingsOverlap(a, b)).toBe(expected);
+    expect(bookingsOverlap(b, a)).toBe(expected);
+  });
+});
+
+describe("U3: у каждого кода ошибки есть сообщение в MESSAGES", () => {
+  /** Полный список кодов: если в ValidationErrorCode добавят код, tsc упадёт на exhaustive. */
+  const ALL_CODES = [
+    "BOOKING_LOCKED",
+    "INVALID_REQUEST",
+    "OUTSIDE_WORKING_HOURS",
+    "START_NOT_BEFORE_END",
+    "DURATION_TOO_SHORT",
+    "DURATION_TOO_LONG",
+    "DURATION_STEP",
+    "DATE_IN_PAST",
+    "START_IN_PAST",
+    "TITLE_TOO_LONG",
+    "OVERLAP",
+  ] as const satisfies readonly ValidationErrorCode[];
+  const exhaustive: Exclude<ValidationErrorCode, (typeof ALL_CODES)[number]> extends never ? true : false = true;
+
+  /** INVALID_REQUEST — формат: сообщения отдельно для даты и времени. */
+  const messageKeys = (code: ValidationErrorCode): string[] =>
+    code === "INVALID_REQUEST" ? ["INVALID_DATE", "INVALID_TIME"] : [code];
+
+  it("U3: список кодов полный", () => {
+    expect(exhaustive).toBe(true);
+  });
+
+  it.each(ALL_CODES)("U3: %s — непустое сообщение в MESSAGES", (code) => {
+    const messages: Record<string, string> = MESSAGES;
+    for (const key of messageKeys(code)) {
+      expect(messages[key], key).toEqual(expect.stringMatching(/[а-яё]/i));
+    }
+  });
+});
+
