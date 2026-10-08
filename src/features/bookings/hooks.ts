@@ -11,7 +11,7 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import type { BookingPatch, RequestOptions } from "@/api/bookings-api";
-import { isConflict, type ApiError } from "@/api/errors";
+import { isConflict, isNotFound, type ApiError } from "@/api/errors";
 import type { Booking, BookingInput } from "@/domain/types";
 import { useBookingsApi } from "./api-context";
 
@@ -46,7 +46,7 @@ export function useDayBookings(date: string): UseQueryResult<Booking[], ApiError
   });
 }
 
-/** Перезапрос списков дат: после успеха и после 409 (Q15, B8). Остальные ошибки список не трогают. */
+/** Перезапрос списков дат: после успеха, 409 (Q15, B8) и 404 (брони уже нет, F5, F6). Остальные ошибки список не трогают (D4). */
 function useInvalidateDays() {
   const queryClient = useQueryClient();
   return (dates: readonly string[]) =>
@@ -69,9 +69,9 @@ export function useUpdateBooking(): UseMutationResult<Booking, ApiError, UpdateV
   return useMutation<Booking, ApiError, UpdateVariables>({
     mutationFn: ({ id, patch, request }) => api.update(id, patch, request),
     onSuccess: (_booking, { patch, previousDate }) => invalidate([previousDate, patch.date ?? previousDate]),
-    // 409: список на дату из формы (Q7).
+    // 409: список на дату из формы (Q7). 404: брони больше нет — список её даты.
     onError: (error, { patch, previousDate }) =>
-      isConflict(error) ? invalidate([patch.date ?? previousDate]) : undefined,
+      isConflict(error) ? invalidate([patch.date ?? previousDate]) : isNotFound(error) ? invalidate([previousDate]) : undefined,
   });
 }
 
@@ -81,5 +81,7 @@ export function useDeleteBooking(): UseMutationResult<void, ApiError, DeleteVari
   return useMutation<void, ApiError, DeleteVariables>({
     mutationFn: ({ id, request }) => api.remove(id, request),
     onSuccess: (_result, { date }) => invalidate([date]),
+    // 404: бронь уже удалена — для UI это мягкий успех (F6), список устарел.
+    onError: (error, { date }) => (isNotFound(error) ? invalidate([date]) : undefined),
   });
 }

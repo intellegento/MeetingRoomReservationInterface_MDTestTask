@@ -250,3 +250,57 @@ describe("мутации: перезапрос списка (Q15)", () => {
     expect(result.current.list.data).toEqual([]);
   });
 });
+
+describe("мутации: 404 и 5xx (этап 6: F6, Q7, D4)", () => {
+  const notFound = () => new ApiError({ status: 404, code: "NOT_FOUND", message: "Бронь не найдена" });
+
+  it("F6: delete → 404 (бронь уже удалена): список даты перезапрошен, брони в нём нет", async () => {
+    const api = new FakeBookingsApi([MORNING]);
+    const { wrapper, queryClient } = createTestWrapper(api);
+    const { result } = renderHook(() => ({ list: useDayBookings(A), remove: useDeleteBooking() }), { wrapper });
+    await waitFor(() => expect(result.current.list.isSuccess).toBe(true));
+    api.bookings = [];
+    api.failNext("remove", notFound());
+
+    await act(() => result.current.remove.mutateAsync({ id: "b1", date: A }).catch(() => undefined));
+    await settled(queryClient);
+
+    expect(api.listCallsFor(A)).toBe(2);
+    expect(result.current.list.data).toEqual([]);
+  });
+
+  it("F5, Q7: update → 404 (бронь удалена): список даты брони перезапрошен", async () => {
+    const api = new FakeBookingsApi([MORNING]);
+    const { wrapper, queryClient } = createTestWrapper(api);
+    const { result } = renderHook(() => ({ list: useDayBookings(A), update: useUpdateBooking() }), { wrapper });
+    await waitFor(() => expect(result.current.list.isSuccess).toBe(true));
+    api.bookings = [];
+    api.failNext("update", notFound());
+
+    await act(() =>
+      result.current.update.mutateAsync({ id: "b1", patch: { end: "10:30" }, previousDate: A }).catch(() => undefined),
+    );
+    await settled(queryClient);
+
+    expect(api.listCallsFor(A)).toBe(2);
+    expect(result.current.list.data).toEqual([]);
+  });
+
+  it.each([
+    { label: "create → 500", error: new ApiError({ status: 500, code: "PARSE", message: "html" }) },
+    { label: "create → NETWORK", error: new ApiError({ status: 0, code: "NETWORK", message: "offline" }) },
+  ])("U3, D4: $label — список не перезапрашивается", async ({ error }) => {
+    const api = new FakeBookingsApi();
+    const { wrapper, queryClient } = createTestWrapper(api);
+    const { result } = renderHook(() => ({ list: useDayBookings(A), create: useCreateBooking() }), { wrapper });
+    await waitFor(() => expect(result.current.list.isSuccess).toBe(true));
+    api.failNext("create", error);
+
+    await act(() =>
+      result.current.create.mutateAsync({ input: { date: A, start: "14:00", end: "15:00" } }).catch(() => undefined),
+    );
+    await settled(queryClient);
+
+    expect(api.listCallsFor(A)).toBe(1);
+  });
+});

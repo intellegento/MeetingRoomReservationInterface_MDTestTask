@@ -2,7 +2,7 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { useId, useRef, type FormEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, type FormEvent, type RefObject } from "react";
 import { TITLE_MAX_LENGTH } from "@/domain/constants";
 
 export type FormField = "start" | "end" | "title";
@@ -17,6 +17,16 @@ export interface EndChoice {
   value: string;
   label: string;
   disabled: boolean;
+}
+
+/** Ответ сервера с ошибкой над формой: тексты готовит src/features (presentApiError). */
+export interface ServerErrorView {
+  title: string;
+  description?: string;
+  /** Показать «Повторить» (5xx, сеть). */
+  retry: boolean;
+  /** Перевести фокус на сообщение (409). */
+  focus: boolean;
 }
 
 export interface BookingFormProps {
@@ -34,8 +44,10 @@ export interface BookingFormProps {
   errors: Partial<Record<FormField, string>>;
   /** Сводка ошибок после попытки отправки. */
   summary: readonly string[];
-  /** Ошибка без поля над формой. */
-  formError?: string;
+  /** Ответ сервера с ошибкой над формой (role="alert"). */
+  serverError?: ServerErrorView;
+  /** Бронь удалена на сервере: сохранить данные как новую бронь (Q7). */
+  saveAsNew: boolean;
   pending: boolean;
   canSave: boolean;
   fieldRefs: {
@@ -46,6 +58,7 @@ export interface BookingFormProps {
   onChange: (field: FormField, value: string) => void;
   onBlur: (field: FormField) => void;
   onSubmit: () => void;
+  onRetry: () => void;
   onClose: () => void;
   onCloseAutoFocus: (event: Event) => void;
 }
@@ -69,6 +82,12 @@ export function BookingForm(props: BookingFormProps) {
   };
   const readOnly = props.readOnlyNote !== undefined;
   const closeRef = useRef<HTMLButtonElement>(null);
+  const serverErrorRef = useRef<HTMLDivElement>(null);
+  const { serverError } = props;
+
+  useEffect(() => {
+    if (serverError?.focus) serverErrorRef.current?.focus();
+  }, [serverError]);
   const locked = readOnly || pending;
   const closeLabel = readOnly || props.unavailableNote !== undefined ? "Закрыть" : "Отмена";
 
@@ -105,10 +124,16 @@ export function BookingForm(props: BookingFormProps) {
           ) : (
             <form className="booking-form" noValidate onSubmit={handleSubmit}>
               {props.readOnlyNote !== undefined && <p className="dialog__note">{props.readOnlyNote}</p>}
-              {props.formError !== undefined && (
-                <p role="alert" className="booking-form__error">
-                  {props.formError}
-                </p>
+              {serverError !== undefined && (
+                <div role="alert" tabIndex={-1} ref={serverErrorRef} className="booking-form__error">
+                  <p className="booking-form__error-title">{serverError.title}</p>
+                  {serverError.description !== undefined && <p>{serverError.description}</p>}
+                  {serverError.retry && (
+                    <button type="button" disabled={pending} onClick={props.onRetry}>
+                      Повторить
+                    </button>
+                  )}
+                </div>
               )}
               {props.summary.length > 0 && (
                 <div role="alert" className="booking-form__summary">
@@ -212,7 +237,7 @@ export function BookingForm(props: BookingFormProps) {
               <div className="dialog__actions">
                 {!readOnly && (
                   <button type="submit" disabled={pending || !props.canSave}>
-                    {pending ? "Сохраняем…" : "Сохранить"}
+                    {pending ? "Сохраняем…" : props.saveAsNew ? "Сохранить как новую бронь" : "Сохранить"}
                   </button>
                 )}
                 <button type="button" ref={closeRef} onClick={props.onClose}>

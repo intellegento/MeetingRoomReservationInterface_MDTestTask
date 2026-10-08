@@ -16,6 +16,8 @@ export interface DayGridProps {
   pastUntil: number;
   /** Будущая бронь — правка, начавшаяся — просмотр; trigger — для возврата фокуса. */
   onSelect: (booking: Booking, trigger: HTMLElement) => void;
+  /** «Удалить» — только у будущих броней (Q4); trigger — для возврата фокуса. */
+  onDelete: (booking: Booking, trigger: HTMLElement) => void;
 }
 
 export const LOCKED_NOTE = "Бронь уже началась — изменить нельзя";
@@ -30,7 +32,7 @@ function placementStyle({ rowStart, rowEnd, insetTop, insetBottom }: GridPlaceme
   };
 }
 
-export function DayGrid({ items, pastUntil, onSelect }: DayGridProps) {
+export function DayGrid({ items, pastUntil, onSelect, onDelete }: DayGridProps) {
   const gridStyle = { ["--rows" as string]: ROW_COUNT } as CSSProperties;
   return (
     <div className="day-grid" style={gridStyle}>
@@ -60,6 +62,16 @@ export function DayGrid({ items, pastUntil, onSelect }: DayGridProps) {
                 <span className="booking__title">{title}</span>
                 {locked && <span className="booking__note">{LOCKED_NOTE}</span>}
               </button>
+              {!locked && (
+                <button
+                  type="button"
+                  className="booking__delete"
+                  aria-label={`Удалить бронь ${time}, ${title}`}
+                  onClick={(event) => onDelete(booking, event.currentTarget)}
+                >
+                  Удалить
+                </button>
+              )}
             </li>
           );
         })}

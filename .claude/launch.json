@@ -4,7 +4,7 @@
     {
       "name": "dev-devtools",
       "runtimeExecutable": "env",
-      "runtimeArgs": ["ENABLE_DEV_TOOLS=true", "npx", "next", "dev", "-p", "3101"],
+      "runtimeArgs": ["ENABLE_DEV_TOOLS=true", "NEXT_PUBLIC_ENABLE_DEV_TOOLS=true", "npx", "next", "dev", "-p", "3101"],
       "port": 3101
     },
     {

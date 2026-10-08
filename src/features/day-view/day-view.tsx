@@ -1,12 +1,16 @@
-// Экран дня: дата из URL, брони, состояния U1–U3, только чтение для прошлого, форма брони (F1–F5, B6, B11).
+// Экран дня: дата из URL, брони, состояния U1–U3, только чтение для прошлого, форма брони, удаление,
+// dev-панель (F1–F6, B6, B8, B11, Q8).
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { isNotFound } from "@/api/errors";
 import { DateNav } from "@/components/day-view/date-nav";
 import { DayEmpty } from "@/components/day-view/day-empty";
 import { DayError } from "@/components/day-view/day-error";
 import { DayGrid } from "@/components/day-view/day-grid";
 import { DayLoading } from "@/components/day-view/day-loading";
+import { DeleteBookingDialog } from "@/components/delete-dialog/delete-booking-dialog";
+import { DevPanel } from "@/components/dev-panel/dev-panel";
 import { ROOM_TIMEZONE } from "@/domain/constants";
 import { getPastUntil, isPastDate } from "@/domain/day";
 import { isBookingLocked } from "@/domain/rules";
@@ -14,8 +18,10 @@ import { getRoomNow, isValidDate } from "@/domain/time";
 import type { Booking } from "@/domain/types";
 import { BookingFormDialog } from "../booking-form/booking-form-dialog";
 import type { FormTarget } from "../booking-form/use-booking-form";
-import { useDayBookings } from "../bookings/hooks";
+import { useDayBookings, useDeleteBooking } from "../bookings/hooks";
+import { presentApiError, type PresentedError } from "../bookings/present-api-error";
 import { getNow } from "../clock";
+import { devRequest, devToolsEnabled, type DevToolsState } from "./dev-tools";
 
 export type DateChangeMode = "push" | "replace";
 
@@ -53,9 +59,44 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
   const openBooking = (booking: Booking, trigger: HTMLElement) => openForm({ mode: "edit", booking }, trigger);
   const returnFocus = (event: Event) => {
     event.preventDefault();
-    // Кнопка-источник могла исчезнуть («Забронировать» после создания) — тогда «Новая бронь».
+    // Кнопка-источник могла исчезнуть («Забронировать» после создания) или бронь удалена — тогда «Новая бронь».
     const trigger = triggerRef.current;
     (trigger?.isConnected ? trigger : createRef.current)?.focus();
+  };
+
+  // Dev-панель (Q8): заголовки mock API для сохранения и удаления.
+  const [devTools, setDevTools] = useState<DevToolsState>({ forceConflict: false, slowNetwork: false });
+  const takeSaveRequest = () => {
+    const request = devRequest(devTools, "save");
+    if (devTools.forceConflict) setDevTools((prev) => ({ ...prev, forceConflict: false }));
+    return request;
+  };
+
+  // Удаление (F6): подтверждение, pending, повтор; 404 — мягкий успех.
+  const [deleting, setDeleting] = useState<{ booking: Booking; error?: PresentedError } | null>(null);
+  const remove = useDeleteBooking();
+  const openDelete = (booking: Booking, trigger: HTMLElement) => {
+    triggerRef.current = trigger;
+    setAnnouncement("");
+    setDeleting({ booking });
+  };
+  const finishDelete = (message: string) => {
+    // Кнопки удалённой брони больше нет — фокус на «Новая бронь» (A2).
+    triggerRef.current = null;
+    setDeleting(null);
+    setAnnouncement(message);
+  };
+  const confirmDelete = () => {
+    if (deleting === null || remove.isPending) return;
+    const { booking } = deleting;
+    remove.mutate(
+      { id: booking.id, date: booking.date, request: devRequest(devTools, "delete") },
+      {
+        onSuccess: () => finishDelete("Бронь удалена"),
+        onError: (error) =>
+          isNotFound(error) ? finishDelete("Бронь уже удалена") : setDeleting({ booking, error: presentApiError(error) }),
+      },
+    );
   };
 
   const showSkeleton = query.data === undefined && !query.isError;
@@ -98,6 +139,7 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
             items={query.data.map((booking) => ({ booking, locked: isBookingLocked(booking, now) }))}
             pastUntil={getPastUntil(date, now)}
             onSelect={openBooking}
+            onDelete={openDelete}
           />
         )}
       </section>
@@ -115,6 +157,25 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
             setAnnouncement(message);
           }}
           onCloseAutoFocus={returnFocus}
+          takeRequest={takeSaveRequest}
+        />
+      )}
+      {deleting && (
+        <DeleteBookingDialog
+          label={deleting.booking.title === undefined ? `${deleting.booking.start}–${deleting.booking.end}` : `${deleting.booking.start}–${deleting.booking.end} «${deleting.booking.title}»`}
+          pending={remove.isPending}
+          error={deleting.error}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleting(null)}
+          onCloseAutoFocus={returnFocus}
+        />
+      )}
+      {devToolsEnabled() && (
+        <DevPanel
+          forceConflict={devTools.forceConflict}
+          slowNetwork={devTools.slowNetwork}
+          onForceConflictChange={(forceConflict) => setDevTools((prev) => ({ ...prev, forceConflict }))}
+          onSlowNetworkChange={(slowNetwork) => setDevTools((prev) => ({ ...prev, slowNetwork }))}
         />
       )}
     </div>

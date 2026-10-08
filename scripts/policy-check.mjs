@@ -223,6 +223,31 @@ function checkChatSecrets() {
   return grep(walk("docs/traces/chats"), pattern).map((hit) => `${hit} — похоже на секрет (docs/security.md)`);
 }
 
+/** Тексты ошибок API — только в present-api-error.ts (этап 6): форма и диалоги получают их через props. */
+const ERROR_TEXTS_FILE = "src/features/bookings/present-api-error.ts";
+
+function checkErrorTexts() {
+  if (!existsSync(ERROR_TEXTS_FILE)) return [`${ERROR_TEXTS_FILE}: файл не найден`];
+  // Кириллические куски строковых и шаблонных литералов (части шаблона между ${…}), от 8 символов.
+  const literals = readFileSync(ERROR_TEXTS_FILE, "utf8").match(/"[^"\n]*"|`[^`]*`/g) ?? [];
+  const texts = [
+    ...new Set(
+      literals
+        .flatMap((literal) => literal.slice(1, -1).split(/\$\{[^}]*\}/))
+        .map((text) => text.replace(/^[\s.:«»–]+|[\s.:«»–]+$/g, ""))
+        .filter((text) => /[А-Яа-яЁё]/.test(text) && text.length >= 8),
+    ),
+  ];
+  // UI-слои. Сообщения ApiError в src/api — диагностика клиента, в UI не показываются.
+  const files = SOURCE_FILES().filter(
+    (f) => /^src\/(features|components|app)\//.test(f) && f !== ERROR_TEXTS_FILE && !/\.test\.(ts|tsx)$/.test(f),
+  );
+  return files.flatMap((file) => {
+    const content = readFileSync(file, "utf8");
+    return texts.filter((text) => content.includes(text)).map((text) => `${file}: текст ошибки «${text}» — только в ${ERROR_TEXTS_FILE}`);
+  });
+}
+
 const searchChecks = () => [
   ...checkEnvFiles(),
   ...checkFocusedOrSkippedTests(),
@@ -230,6 +255,7 @@ const searchChecks = () => [
   ...checkDomainMocks(),
   ...checkDependencyJournal(),
   ...checkChatSecrets(),
+  ...checkErrorTexts(),
 ];
 
 function main() {

@@ -3,9 +3,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { BookingPatch } from "@/api/bookings-api";
-import { isValidation, type ApiError } from "@/api/errors";
-import type { EndChoice, FormField, FormValues } from "@/components/booking-form/booking-form";
+import type { BookingPatch, RequestOptions } from "@/api/bookings-api";
+import { isConflict, isNotFound, isValidation, type ApiError } from "@/api/errors";
+import type { EndChoice, FormField, FormValues, ServerErrorView } from "@/components/booking-form/booking-form";
 import { ROOM_TIMEZONE } from "@/domain/constants";
 import { getEarliestStart } from "@/domain/day";
 import { getEndOptions } from "@/domain/end-options";
@@ -13,6 +13,7 @@ import { isBookingLocked, MESSAGES, normalizeTitle, validateBooking, validateSta
 import { getRoomNow } from "@/domain/time";
 import type { Booking, BookingInput, RoomNow, ValidationContext, ValidationError } from "@/domain/types";
 import { useCreateBooking, useUpdateBooking } from "../bookings/hooks";
+import { isRetryable, presentApiError } from "../bookings/present-api-error";
 import { getNow } from "../clock";
 
 export type FormTarget = { mode: "create"; date: string } | { mode: "edit"; booking: Booking };
@@ -62,9 +63,14 @@ export interface UseBookingFormOptions {
   /** Брони дня из списка экрана — только для проверок (Q7): значения формы от них не зависят. */
   bookings: readonly Booking[];
   onSaved: (message: string) => void;
+  /** Параметры запроса сохранения (заголовки dev-панели, Q8); вызывается один раз на отправку. */
+  takeRequest?: () => RequestOptions | undefined;
 }
 
-export function useBookingForm({ target, bookings, onSaved }: UseBookingFormOptions) {
+/** Ответ сервера с ошибкой над формой: что показать и что можно сделать (U3, B8, Q7, D4). */
+type ServerError = ServerErrorView & { kind: "conflict" | "notFound" | "other" };
+
+export function useBookingForm({ target, bookings, onSaved, takeRequest }: UseBookingFormOptions) {
   const original = target.mode === "edit" ? target.booking : undefined;
   const date = original?.date ?? (target.mode === "create" ? target.date : "");
   const editingId = original?.id;
@@ -77,7 +83,9 @@ export function useBookingForm({ target, bookings, onSaved }: UseBookingFormOpti
   // промежуточные значения (13:0… → 13:03 → 13:30), и конец, снова допустимый, возвращается.
   const [resetEnd, setResetEnd] = useState<string>();
   const [serverErrors, setServerErrors] = useState<Partial<Record<FormField, string>>>({});
-  const [formError, setFormError] = useState<string>();
+  const [serverError, setServerError] = useState<ServerError>();
+  // Пометка полей времени после 409: снимается изменением начала или конца (B8 п. 5).
+  const [conflictErrors, setConflictErrors] = useState<Partial<Record<FormField, string>>>({});
   const [lockedNote, setLockedNote] = useState<string>();
   const submitting = useRef(false);
   const fieldRefs = {
@@ -115,11 +123,12 @@ export function useBookingForm({ target, bookings, onSaved }: UseBookingFormOpti
   const check = checkValues(input, values, context(now));
   const errors: Partial<Record<FormField, string>> = {};
   for (const field of FIELDS) {
-    const message = serverErrors[field] ?? (touched[field] || submitted ? check.byField[field] : undefined);
+    const message = serverErrors[field] ?? conflictErrors[field] ?? (touched[field] || submitted ? check.byField[field] : undefined);
     if (message !== undefined) errors[field] = message;
   }
   const clientMessages = [...FIELDS.flatMap((field) => check.byField[field] ?? []), ...check.other.map((error) => error.message)];
-  const summary = submitted && readOnlyNote === undefined ? clientMessages : [];
+  // Пока видна ошибка сервера, сводка клиента её не дублирует (после 409 список уже знает о чужой брони).
+  const summary = submitted && readOnlyNote === undefined && serverError === undefined ? clientMessages : [];
 
   const changed =
     original === undefined ||
@@ -143,6 +152,10 @@ export function useBookingForm({ target, bookings, onSaved }: UseBookingFormOpti
       }
     }
     if (field === "end") setResetEnd(undefined);
+    if (field === "start" || field === "end") {
+      setConflictErrors({});
+      if (serverError?.kind === "conflict") setServerError(undefined);
+    }
     setValues(next);
     setServerErrors(clearedErrors);
   };
@@ -150,16 +163,33 @@ export function useBookingForm({ target, bookings, onSaved }: UseBookingFormOpti
   const onBlur = (field: FormField) => setTouched((prev) => ({ ...prev, [field]: true }));
 
   const onServerError = (error: ApiError) => {
-    if (error.code === "BOOKING_LOCKED") setLockedNote(error.message);
-    else if (isValidation(error) && isFormField(error.field)) setServerErrors((prev) => ({ ...prev, [error.field as FormField]: error.message }));
-    else setFormError(error.message);
+    if (error.code === "BOOKING_LOCKED") {
+      setLockedNote(error.message);
+      return;
+    }
+    const presented = presentApiError(error);
+    // 422 с полем формы — ошибка у поля, без баннера (как на этапе 5).
+    if (isValidation(error) && isFormField(error.field)) {
+      setServerErrors((prev) => ({ ...prev, ...presented.fieldErrors }));
+      return;
+    }
+    const kind = isConflict(error) ? "conflict" : isNotFound(error) ? "notFound" : "other";
+    if (kind === "conflict") setConflictErrors(presented.fieldErrors);
+    setServerError({
+      title: presented.title,
+      description: presented.description,
+      retry: isRetryable(error),
+      focus: kind === "conflict",
+      kind,
+    });
   };
 
   const onSubmit = () => {
     // Второй submit до ответа сервера не уходит (U4, T8).
     if (submitting.current || readOnlyNote !== undefined || !changed) return;
     setSubmitted(true);
-    setFormError(undefined);
+    const saveAsNew = serverError?.kind === "notFound";
+    setServerError(undefined);
 
     // Часы клиента на момент отправки (B12): бронь могла начаться, пока форма открыта.
     const atSubmit = checkValues(input, values, context(roomNow()));
@@ -176,14 +206,16 @@ export function useBookingForm({ target, bookings, onSaved }: UseBookingFormOpti
 
     submitting.current = true;
     const settle = { onSettled: () => void (submitting.current = false), onError: onServerError };
-    if (original === undefined) {
-      create.mutate({ input }, { ...settle, onSuccess: () => onSaved("Бронь создана") });
+    const request = takeRequest?.();
+    // Бронь удалили, пока форма была открыта (404, Q7): те же данные — новой бронью.
+    if (original === undefined || saveAsNew) {
+      create.mutate({ input, request }, { ...settle, onSuccess: () => onSaved("Бронь создана") });
     } else {
       const patch: BookingPatch = {};
       if (values.start !== original.start) patch.start = values.start;
       if (values.end !== original.end) patch.end = values.end;
       if (title !== normalizeTitle(original.title)) patch.title = title ?? "";
-      update.mutate({ id: original.id, patch, previousDate: original.date }, { ...settle, onSuccess: () => onSaved("Изменения сохранены") });
+      update.mutate({ id: original.id, patch, previousDate: original.date, request }, { ...settle, onSuccess: () => onSaved("Изменения сохранены") });
     }
   };
 
@@ -201,12 +233,15 @@ export function useBookingForm({ target, bookings, onSaved }: UseBookingFormOpti
     endReset: resetEnd !== undefined,
     errors,
     summary,
-    formError,
+    serverError,
+    saveAsNew: serverError?.kind === "notFound",
     pending,
     canSave: changed,
     fieldRefs,
     onChange,
     onBlur,
     onSubmit,
+    // «Повторить» после 5xx и NETWORK — та же мутация с текущими данными формы, без перезапроса списка (D4).
+    onRetry: onSubmit,
   };
 }
