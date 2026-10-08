@@ -16,6 +16,12 @@ Next.js + TypeScript strict, mock API на Route Handlers + in-memory store.
 - `docs/checklists/stage-gate.md`, `docs/checklists/pre-delivery.md` — чек-листы.
 - `docs/time-log.md` — время этапов. `docs/traces/` — трейсы этапов, `INDEX.md`, `incidents.md`, `chats/`.
 
+## Время — для любой работы
+Любая работа с коммитом, включая работу вне этапов, начинается и заканчивается
+записью `date '+%Y-%m-%d %H:%M:%S %z'` в `docs/time-log.md` (своя строка: этап или
+`Nb: <суть>`). Коммит без строки в time-log с заполненными стартом и концом запрещён.
+Проверка: `scripts/policy-check.mjs` (хук `pre-commit` и gate).
+
 ## Порядок работы над этапом N
 1. Получить команду заказчика на этап, прочитать AGENTS.md и нужные docs.
 2. Выполнить `date '+%Y-%m-%d %H:%M:%S %z'`, записать вывод целиком как старт в `docs/time-log.md`.

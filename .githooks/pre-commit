@@ -1,0 +1,3 @@
+#!/bin/sh
+# Проверки перед коммитом (AGENTS.md, docs/testing.md). Отключать нельзя.
+exec node scripts/policy-check.mjs --staged
