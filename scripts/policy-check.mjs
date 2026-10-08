@@ -2,13 +2,12 @@
 // Проверки правил AGENTS.md, которые не покрывают tsc и ESLint (docs/testing.md,
 // «Автоматические проверки правил AGENTS.md»). Без зависимостей.
 //
-//   node scripts/policy-check.mjs           — gate: файл time-log + история коммитов
-//   node scripts/policy-check.mjs --staged  — git-хук pre-commit: индекс перед коммитом
-//
-// Сейчас реализована проверка time-log. Остальные проверки добавляются на этапе 1.
+//   node scripts/policy-check.mjs           — gate: time-log, история коммитов, проверки поиском
+//   node scripts/policy-check.mjs --staged  — git-хук pre-commit: time-log в индексе перед коммитом
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 const TIME_LOG = "docs/time-log.md";
 
@@ -137,6 +136,102 @@ function checkHistory() {
   return errors;
 }
 
+// --- Проверки поиском (docs/testing.md, «Автоматические проверки правил AGENTS.md») ---
+
+/** Все файлы под dir (рекурсивно), кроме node_modules. */
+function walk(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === "node_modules" ? [] : walk(path);
+    return [path];
+  });
+}
+
+/** Строки файлов, совпавшие с шаблоном: «файл:строка: текст». */
+function grep(files, pattern) {
+  return files.flatMap((file) =>
+    readFileSync(file, "utf8")
+      .split("\n")
+      .flatMap((line, i) => (pattern.test(line) ? [`${file}:${i + 1}: ${line.trim()}`] : [])),
+  );
+}
+
+const SOURCE_FILES = () => walk("src").filter((f) => /\.(ts|tsx|mts|mjs|js|jsx)$/.test(f));
+const TEST_FILES = () => SOURCE_FILES().filter((f) => /\.test\.(ts|tsx)$/.test(f));
+
+/** .env* в git — только .env.example, и в нём только имена без значений. */
+function checkEnvFiles() {
+  const errors = git("ls-files")
+    .split("\n")
+    .filter((f) => /(^|\/)\.env/.test(f) && f !== ".env.example")
+    .map((f) => `${f}: в репозитории разрешён только .env.example`);
+  if (existsSync(".env.example")) {
+    readFileSync(".env.example", "utf8")
+      .split("\n")
+      .forEach((line, i) => {
+        if (line.trim() === "" || line.startsWith("#")) return;
+        if (!/^[A-Z][A-Z0-9_]*=$/.test(line)) errors.push(`.env.example:${i + 1}: только «ИМЯ=» без значения`);
+      });
+  }
+  return errors;
+}
+
+/** Нет .skip / .only / .todo / xit / fit в тестах. */
+function checkFocusedOrSkippedTests() {
+  return grep(TEST_FILES(), /\.(skip|only|todo)\(|\b(xit|xdescribe|xtest|fit|fdescribe)\(/).map(
+    (hit) => `${hit} — .skip/.only/.todo/xit запрещены (AGENTS.md)`,
+  );
+}
+
+/** eslint-disable только с причиной после « -- »; @ts-ignore не используется. */
+function checkSuppressions() {
+  const files = SOURCE_FILES();
+  return [
+    ...grep(files, /eslint-disable(?!.* -- \S)/).map((hit) => `${hit} — eslint-disable без « -- <причина>» (S3)`),
+    ...grep(files, /@ts-ignore|@ts-nocheck/).map((hit) => `${hit} — @ts-ignore/@ts-nocheck запрещены (S3)`),
+  ];
+}
+
+/** src/domain не мокается в тестах. */
+function checkDomainMocks() {
+  return grep(TEST_FILES(), /\b(vi|jest)\.(mock|doMock)\([^)]*domain/).map(
+    (hit) => `${hit} — мокать src/domain нельзя (AGENTS.md)`,
+  );
+}
+
+/** Каждая зависимость из package.json записана в журнал docs/architecture.md. */
+function checkDependencyJournal() {
+  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  const architecture = readFileSync("docs/architecture.md", "utf8");
+  const journal = architecture.slice(architecture.indexOf("## Журнал зависимостей"));
+  const journaled = new Set(
+    journal
+      .split("\n")
+      .filter((line) => line.startsWith("|"))
+      .map((line) => /`([^`]+)`/.exec(line.split("|")[2] ?? "")?.[1])
+      .filter(Boolean),
+  );
+  return Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
+    .filter((name) => !journaled.has(name))
+    .map((name) => `зависимость ${name} не записана в журнал docs/architecture.md`);
+}
+
+/** В переписке с AI нет секретов (docs/security.md). */
+function checkChatSecrets() {
+  const pattern = /gho_|ghp_|github_pat_|\bsk-|xox[abprs]-|PRIVATE KEY|token=|secret=|password=/i;
+  return grep(walk("docs/traces/chats"), pattern).map((hit) => `${hit} — похоже на секрет (docs/security.md)`);
+}
+
+const searchChecks = () => [
+  ...checkEnvFiles(),
+  ...checkFocusedOrSkippedTests(),
+  ...checkSuppressions(),
+  ...checkDomainMocks(),
+  ...checkDependencyJournal(),
+  ...checkChatSecrets(),
+];
+
 function main() {
   const staged = process.argv.includes("--staged");
   // Одна и та же ошибка строки может прийти и из проверки файла, и из проверки диффа.
@@ -144,7 +239,11 @@ function main() {
     ...new Set(
       staged
         ? checkStaged()
-        : [...checkTimeLogFile(readFileSync(TIME_LOG, "utf8"), { requireComplete: false }), ...checkHistory()],
+        : [
+            ...checkTimeLogFile(readFileSync(TIME_LOG, "utf8"), { requireComplete: false }),
+            ...checkHistory(),
+            ...searchChecks(),
+          ],
     ),
   ];
 

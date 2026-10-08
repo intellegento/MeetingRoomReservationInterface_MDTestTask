@@ -1,3 +1,5 @@
 #!/bin/sh
 # Проверки перед коммитом (AGENTS.md, docs/testing.md). Отключать нельзя.
-exec node scripts/policy-check.mjs --staged
+# 1) time-log в индексе; 2) полный gate (tsc, eslint, policy-check, тесты в двух поясах, next build).
+node scripts/policy-check.mjs --staged || exit 1
+exec npm run gate
