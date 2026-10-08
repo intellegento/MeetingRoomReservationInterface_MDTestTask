@@ -23,6 +23,7 @@
 | 8 | [review.md](review.md) | `stage 8: independent review` | Независимое ревью: 3 blocker (сдача), 3 major (J1–J3), 17 minor |
 | 8b | [review.md](review.md#8b-исправления-ревью) | `stage 8b: review fixes (gate green)` | J2 детерминированные id seed, J3 кнопки прежнего списка disabled, m1 длина названия после trim, m3 один текст B11, INC-10 (J1) и пункт stage-gate, статусы INC-3/INC-9, устаревшие документы, [README-notes.md](README-notes.md); 566 тестов |
 | 8c | [review.md](review.md#8c-новая-бронь-и-забронировать-во-время-загрузки-даты) | `stage 8c: disable new booking while loading (gate green)` | Остаток J3: «Новая бронь» и «Забронировать» disabled с пояснением, пока виден список прежней даты; 568 тестов |
+| 9a | [stage-9.md](stage-9.md#9a-подготовка-к-деплою) | `stage 9a: deploy prep (gate green)` | Сборка без предупреждений, значения env по умолчанию, предложение флагов демо, README «Деплой» |
 
 - Инциденты: [incidents.md](incidents.md)
 - Переписка с AI: `chats/` (появится на этапе 9)
