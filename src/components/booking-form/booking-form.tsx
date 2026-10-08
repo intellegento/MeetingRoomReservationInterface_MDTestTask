@@ -37,6 +37,8 @@ export interface BookingFormProps {
   /** Только чтение с пояснением (B11). */
   readOnlyNote?: string;
   values: FormValues;
+  /** Длина названия после trim (Q6) — для счётчика N/100. */
+  titleLength: number;
   startMin?: string;
   endChoices: readonly EndChoice[];
   noEnds: boolean;
@@ -217,7 +219,6 @@ export function BookingForm(props: BookingFormProps) {
                   ref={props.fieldRefs.title}
                   type="text"
                   value={values.title}
-                  maxLength={TITLE_MAX_LENGTH}
                   readOnly={locked}
                   aria-invalid={errors.title ? true : undefined}
                   aria-describedby={describedBy(ids.titleCounter, errors.title && ids.titleError)}
@@ -225,7 +226,7 @@ export function BookingForm(props: BookingFormProps) {
                   onBlur={() => props.onBlur("title")}
                 />
                 <p id={ids.titleCounter} className="field__hint">
-                  {values.title.length}/{TITLE_MAX_LENGTH}
+                  {props.titleLength}/{TITLE_MAX_LENGTH}
                 </p>
                 {errors.title && (
                   <p id={ids.titleError} className="field__error">

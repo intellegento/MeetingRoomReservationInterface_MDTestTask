@@ -140,6 +140,7 @@ export function DayView({ dateParam, onDateChange }: DayViewProps) {
             pastUntil={getPastUntil(date, now)}
             onSelect={openBooking}
             onDelete={openDelete}
+            stale={query.isPlaceholderData}
           />
         )}
       </section>

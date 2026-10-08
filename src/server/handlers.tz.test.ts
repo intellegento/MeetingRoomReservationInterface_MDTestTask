@@ -36,4 +36,11 @@ describe("серверное «сегодня» в поясе комнаты (B9
     expect((await listOn("2026-10-09")).length).toBeGreaterThan(0);
     expect(await listOn("2026-10-07")).toEqual([]);
   });
+
+  it("F2, J2: сейчас 2026-10-07T19:30Z → id seed от 2026-10-08 (Бишкек): seed-2026-10-08-1, seed-2026-10-08-2", async () => {
+    // Вывод ожидания: сегодня по Бишкеку 2026-10-08 (не 2026-10-07 по UTC/LA) → id seed-2026-10-08-<n>, n по порядку createSeed.
+    resetStore();
+    expect((await listOn("2026-10-08")).map((b) => b.id)).toEqual(["seed-2026-10-08-1", "seed-2026-10-08-2"]);
+    expect((await listOn("2026-10-09")).map((b) => b.id)).toEqual(["seed-2026-10-08-3", "seed-2026-10-08-4", "seed-2026-10-08-5"]);
+  });
 });

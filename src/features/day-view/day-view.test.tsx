@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/api/errors";
+import { MESSAGES } from "@/domain/rules";
 import type { Booking } from "@/domain/types";
 import { createTestWrapper, FakeBookingsApi } from "../bookings/test-utils";
 import { resetNowForTests, setNowForTests } from "../clock";
@@ -15,7 +16,7 @@ const TODAY = "2026-10-08";
 const YESTERDAY = "2026-10-07";
 const TOMORROW = "2026-10-09";
 
-const LOCKED_NOTE = "Бронь уже началась — изменить нельзя";
+const LOCKED_NOTE = MESSAGES.BOOKING_LOCKED;
 const PAST_DATE_NOTE = "Прошедшая дата, бронирование недоступно";
 
 const booking = (id: string, date: string, start: string, end: string, title?: string): Booking =>
@@ -375,5 +376,84 @@ describe("DayView: смена даты", () => {
     await waitFor(() => expect(api.listCalls.find((call) => call.date === A)?.signal?.aborted).toBe(true));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Не удалось загрузить брони")).toBeNull();
+  });
+});
+
+describe("DayView: прежний список во время загрузки (J3)", () => {
+  // Вывод ожидания: пока у запроса isPlaceholderData (видны брони прежней даты), все кнопки броней disabled
+  // и через aria-describedby ссылаются на пояснение STALE_NOTE; после ответа — кнопки новой даты активны, без пояснения.
+  const STALE_NOTE = "Брони выбранной даты загружаются — действия недоступны";
+  const describedText = (element: HTMLElement) =>
+    (element.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ");
+  const isDisabled = (element: HTMLElement) => (element as HTMLButtonElement).disabled;
+
+  it("F1, U1: сегодня 10:10 → «Вперёд», пока грузится завтра: «Посмотреть» 09:30–10:30, «Изменить» и «Удалить» 11:00–12:00 disabled с пояснением", async () => {
+    const api = new FakeBookingsApi([
+      booking("t1", TODAY, "09:30", "10:30", "Планёрка"),
+      booking("t2", TODAY, "11:00", "12:00", "Созвон"),
+      booking("n1", TOMORROW, "15:00", "16:00", "Демо"),
+    ]);
+    renderDay(api, TODAY);
+    await screen.findByText(/11:00–12:00/);
+    const release = api.holdList(TOMORROW);
+
+    fireEvent.click(screen.getByRole("button", { name: "Вперёд" }));
+    await screen.findByRole("status");
+
+    const stale = [
+      screen.getByRole("button", { name: /^Посмотреть бронь 09:30–10:30/ }),
+      screen.getByRole("button", { name: /^Изменить бронь 11:00–12:00/ }),
+      screen.getByRole("button", { name: /^Удалить бронь 11:00–12:00/ }),
+    ];
+    for (const button of stale) {
+      expect(isDisabled(button)).toBe(true);
+      expect(describedText(button)).toBe(STALE_NOTE);
+    }
+    fireEvent.click(stale[1]!);
+    fireEvent.click(stale[2]!);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    release();
+    const edit = await screen.findByRole("button", { name: /^Изменить бронь 15:00–16:00/ });
+    const remove = screen.getByRole("button", { name: /^Удалить бронь 15:00–16:00/ });
+    for (const button of [edit, remove]) {
+      expect(isDisabled(button)).toBe(false);
+      expect(button.getAttribute("aria-describedby")).toBeNull();
+    }
+    expect(screen.queryByText(STALE_NOTE)).toBeNull();
+  });
+
+  it("F1, B6: с завтра на прошедшую дату — пока грузится, под баннером «Прошедшая дата» нет активных «Изменить»/«Удалить»", async () => {
+    const api = new FakeBookingsApi([booking("n1", TOMORROW, "11:00", "12:00", "Ретро")]);
+    const { setUrl } = renderDay(api, TOMORROW);
+    await screen.findByText(/11:00–12:00/);
+    const release = api.holdList(YESTERDAY);
+
+    setUrl(YESTERDAY);
+    expect(await screen.findByText(PAST_DATE_NOTE)).toBeTruthy();
+
+    const actions = within(schedule()).getAllByRole("button", { name: /^(Изменить|Удалить) бронь 11:00–12:00/ });
+    expect(actions).toHaveLength(2);
+    for (const button of actions) {
+      expect(isDisabled(button)).toBe(true);
+      expect(describedText(button)).toBe(STALE_NOTE);
+    }
+
+    release();
+    expect(await screen.findByText("На эту дату броней нет")).toBeTruthy();
+  });
+
+  it("F1: список своей даты (не placeholder) — кнопки активны, пояснения нет", async () => {
+    const api = new FakeBookingsApi([booking("n1", TOMORROW, "11:00", "12:00")]);
+    renderDay(api, TOMORROW);
+    const edit = await screen.findByRole("button", { name: /^Изменить бронь 11:00–12:00/ });
+    expect(isDisabled(edit)).toBe(false);
+    expect(edit.getAttribute("aria-describedby")).toBeNull();
+    expect(screen.queryByText(STALE_NOTE)).toBeNull();
   });
 });

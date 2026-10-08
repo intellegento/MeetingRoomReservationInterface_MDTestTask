@@ -2,7 +2,7 @@
 // «Сейчас» — 2026-10-08 10:10:00 по Бишкеку, подмена только через src/server/clock.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROOM_TIMEZONE } from "@/domain/constants";
-import { validateBooking } from "@/domain/rules";
+import { bookingsOverlap, validateBooking } from "@/domain/rules";
 import { getRoomNow } from "@/domain/time";
 import type { Booking } from "@/domain/types";
 import {
@@ -95,6 +95,58 @@ describe("seed (Q16)", () => {
       expect(validateBooking(b, { bookings: tomorrow, now, editingId: b.id })).toEqual({ ok: true });
     }
     expect(new Set(tomorrow.map((b) => b.id)).size).toBe(tomorrow.length);
+  });
+});
+
+describe("seed: детерминированный (J2)", () => {
+  // Вывод ожидания: id = seed-<сегодня по Бишкеку>-<номер в createSeed>, одинаковы в каждом инстансе (D3, Q9).
+  const SEED_TODAY: Booking[] = [
+    booking("seed-2026-10-08-1", "09:30", "10:30", TODAY, "Планёрка"),
+    booking("seed-2026-10-08-2", "14:00", "15:00", TODAY, "Созвон с клиентом"),
+  ];
+  const SEED_TOMORROW: Booking[] = [
+    booking("seed-2026-10-08-3", "10:00", "11:00", TOMORROW, "Ретро"),
+    booking("seed-2026-10-08-4", "11:00", "12:00", TOMORROW),
+    booking("seed-2026-10-08-5", "15:30", "17:00", TOMORROW, "Демо"),
+  ];
+
+  it("F2: сейчас 2026-10-08 10:10 Бишкек → seed на 2026-10-08 и 2026-10-09 с id seed-2026-10-08-1…5", async () => {
+    resetStore();
+    expect(await listOn(TODAY)).toEqual(SEED_TODAY);
+    expect(await listOn(TOMORROW)).toEqual(SEED_TOMORROW);
+    expect(await listOn(YESTERDAY)).toEqual([]);
+    expect(await listOn(SATURDAY)).toEqual([]);
+  });
+
+  it("F2: повторный seed (новый инстанс) даёт те же id и брони", async () => {
+    resetStore();
+    const first = [...(await listOn(TODAY)), ...(await listOn(TOMORROW))];
+    resetStore();
+    const second = [...(await listOn(TODAY)), ...(await listOn(TOMORROW))];
+    expect(second).toEqual(first);
+    expect(second).toEqual([...SEED_TODAY, ...SEED_TOMORROW]);
+  });
+
+  it("F2, D3: PATCH и DELETE seed-брони по id из другого инстанса → 200 и 204", async () => {
+    resetStore();
+    const [ownedByInstanceA] = await listOn(TOMORROW);
+    resetStore(); // инстанс B: свой seed
+    const patched = await patchBooking(ownedByInstanceA?.id ?? "", { title: "Ретро-2" });
+    expect(patched.status).toBe(200);
+    expect(await readBooking(patched)).toEqual(booking("seed-2026-10-08-3", "10:00", "11:00", TOMORROW, "Ретро-2"));
+    resetStore(); // инстанс C
+    expect((await deleteBooking("seed-2026-10-08-3")).status).toBe(204);
+  });
+
+  it("F2: seed-брони сегодня и завтра не пересекаются между собой", async () => {
+    resetStore();
+    for (const list of [await listOn(TODAY), await listOn(TOMORROW)]) {
+      for (const a of list) {
+        for (const b of list) {
+          if (a.id !== b.id) expect(bookingsOverlap(a, b), `${a.id} × ${b.id}`).toBe(false);
+        }
+      }
+    }
   });
 });
 

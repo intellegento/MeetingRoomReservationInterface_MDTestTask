@@ -23,8 +23,10 @@ function bookings(): Map<string, Booking> {
   let map = holder[STORE_KEY];
   if (!map) {
     map = new Map();
-    for (const input of createSeed(getRoomNow(getNow(), ROOM_TIMEZONE).date)) {
-      const booking = withId(newBookingId(), input);
+    const today = getRoomNow(getNow(), ROOM_TIMEZONE).date;
+    // Детерминированные id (J2): serverless-инстансы с отдельным store видят у seed-броней одни и те же id.
+    for (const [index, input] of createSeed(today).entries()) {
+      const booking = withId(`seed-${today}-${index + 1}`, input);
       map.set(booking.id, booking);
     }
     holder[STORE_KEY] = map;

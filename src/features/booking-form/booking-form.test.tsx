@@ -332,14 +332,14 @@ describe("Форма: правила domain (B1, B6, B12)", () => {
 });
 
 describe("Форма: создание и название (F4, U4)", () => {
-  it("F4: название — maxLength 100 и счётчик N/100", async () => {
+  it("F4: название — без атрибута maxLength, счётчик N/100 по длине после trim", async () => {
     await openCreate(new FakeBookingsApi(), TOMORROW);
 
-    expect(titleInput().maxLength).toBe(100);
+    expect(titleInput().hasAttribute("maxlength")).toBe(false);
     expect(description(titleInput())).toContain("0/100");
 
     setTitle("  Демо  ");
-    expect(description(titleInput())).toContain("8/100");
+    expect(description(titleInput())).toContain("4/100");
   });
 
   it("F4, U4, A2: создание завтра 14:00–15:00 «  Демо  » → create с title «Демо», диалог закрыт, aria-live «Бронь создана», список перезапрошен", async () => {
@@ -386,6 +386,42 @@ describe("Форма: создание и название (F4, U4)", () => {
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[0].title).toHaveLength(100);
+  });
+
+  it("F4, Q6: «  » + 100 символов + «  » → счётчик 100/100, ошибки нет, create с названием из 100 символов", async () => {
+    // Вывод ожидания: Q6 — длина считается после trim → 100 ≤ 100, счётчик 100/100, отправка проходит.
+    const api = new FakeBookingsApi();
+    const create = vi.spyOn(api, "create");
+    await openCreate(api, TOMORROW);
+
+    setStart("14:00");
+    setEnd("15:00");
+    setTitle(`  ${"я".repeat(100)}  `);
+    fireEvent.blur(titleInput());
+
+    expect(description(titleInput())).toContain("100/100");
+    expect(titleInput().getAttribute("aria-invalid")).toBeNull();
+    submit();
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]?.[0].title).toBe("я".repeat(100));
+  });
+
+  it("F4, Q6: «  » + 101 символ + «  » → счётчик 101/100, после blur ошибка «Название не длиннее 100 символов» у поля, create не вызван", async () => {
+    // Вывод ожидания: Q6 — после trim 101 > 100 → TITLE_TOO_LONG у поля «Название», отправка блокируется клиентом.
+    const api = new FakeBookingsApi();
+    const create = vi.spyOn(api, "create");
+    await openCreate(api, TOMORROW);
+
+    setStart("14:00");
+    setEnd("15:00");
+    setTitle(`  ${"я".repeat(101)}  `);
+    fireEvent.blur(titleInput());
+
+    expect(description(titleInput())).toContain("101/100");
+    expect(titleInput().getAttribute("aria-invalid")).toBe("true");
+    expect(description(titleInput())).toContain(MESSAGES.TITLE_TOO_LONG);
+    submit();
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("U4, T8: отправка — «Сохраняем…», кнопка disabled, поля только чтение, второй клик не шлёт запрос", async () => {

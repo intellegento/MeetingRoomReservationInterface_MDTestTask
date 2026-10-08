@@ -1,6 +1,7 @@
 // Сетка дня на CSS Grid: ряды по 30 минут, брони блоками на своих рядах, прошлое затемнено (F2, B6, B11).
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import { WORKDAY_START_MINUTES } from "@/domain/constants";
+import { MESSAGES } from "@/domain/rules";
 import type { Booking } from "@/domain/types";
 import { getGridPlacement, getGridPlacementMinutes, ROW_COUNT, ROW_LABELS, ROW_MINUTES, type GridPlacement } from "./grid-placement";
 
@@ -18,9 +19,11 @@ export interface DayGridProps {
   onSelect: (booking: Booking, trigger: HTMLElement) => void;
   /** «Удалить» — только у будущих броней (Q4); trigger — для возврата фокуса. */
   onDelete: (booking: Booking, trigger: HTMLElement) => void;
+  /** Показаны брони прежней даты, пока грузится новая (J3): кнопки броней disabled с пояснением. */
+  stale?: boolean;
 }
 
-export const LOCKED_NOTE = "Бронь уже началась — изменить нельзя";
+export const STALE_NOTE = "Брони выбранной даты загружаются — действия недоступны";
 
 /** Ряды сетки и отступы внутри них в процентах высоты блока. */
 function placementStyle({ rowStart, rowEnd, insetTop, insetBottom }: GridPlacement): CSSProperties {
@@ -32,10 +35,17 @@ function placementStyle({ rowStart, rowEnd, insetTop, insetBottom }: GridPlaceme
   };
 }
 
-export function DayGrid({ items, pastUntil, onSelect, onDelete }: DayGridProps) {
+export function DayGrid({ items, pastUntil, onSelect, onDelete, stale = false }: DayGridProps) {
   const gridStyle = { ["--rows" as string]: ROW_COUNT } as CSSProperties;
+  const staleNoteId = useId();
+  const staleProps = stale ? { disabled: true, "aria-describedby": staleNoteId } : {};
   return (
     <div className="day-grid" style={gridStyle}>
+      {stale && (
+        <p id={staleNoteId} className="visually-hidden">
+          {STALE_NOTE}
+        </p>
+      )}
       {ROW_LABELS.map((label, i) => (
         <div key={label} className="day-grid__label" style={{ gridRow: `${i + 1}` }}>
           {label}
@@ -56,17 +66,19 @@ export function DayGrid({ items, pastUntil, onSelect, onDelete }: DayGridProps) 
                 type="button"
                 className={locked ? "day-grid__fill booking booking--locked" : "day-grid__fill booking"}
                 aria-label={`${locked ? "Посмотреть" : "Изменить"} бронь ${time}, ${title}`}
+                {...staleProps}
                 onClick={(event) => onSelect(booking, event.currentTarget)}
               >
                 <span className="booking__time">{time}</span>
                 <span className="booking__title">{title}</span>
-                {locked && <span className="booking__note">{LOCKED_NOTE}</span>}
+                {locked && <span className="booking__note">{MESSAGES.BOOKING_LOCKED}</span>}
               </button>
               {!locked && (
                 <button
                   type="button"
                   className="booking__delete"
                   aria-label={`Удалить бронь ${time}, ${title}`}
+                  {...staleProps}
                   onClick={(event) => onDelete(booking, event.currentTarget)}
                 >
                   Удалить

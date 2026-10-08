@@ -227,6 +227,8 @@ export function useBookingForm({ target, bookings, onSaved, takeRequest }: UseBo
     unavailableNote,
     readOnlyNote,
     values,
+    // Длина после normalizeTitle из domain (Q6): пробелы по краям не считаются.
+    titleLength: title?.length ?? 0,
     startMin: earliestStart ?? undefined,
     endChoices,
     noEnds,
