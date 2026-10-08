@@ -201,7 +201,7 @@ describe("мутации: перезапрос списка (Q15)", () => {
   });
 
   it("F5: update со сменой даты A → B перезапрашивает списки обеих дат (Q5)", async () => {
-    const api = new FakeBookingsApi([MORNING, ON_B]);
+    const api = new FakeBookingsApi([ON_B, MORNING]);
     const { wrapper, queryClient } = createTestWrapper(api);
     const { result } = renderHook(
       () => ({ listA: useDayBookings(A), listB: useDayBookings(B), update: useUpdateBooking() }),
